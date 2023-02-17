@@ -1,19 +1,10 @@
 <?php
 declare(strict_types=1);
-// <!-- Argument parser -->
-
-// <!-- --Help -->
-// if ($argc > 1) {
-//     if ($argv[1] == "--help") {
-//         echo("This is help and this will help you a lot.\n");
-//         exit(0);
-//     }
-// }
 
 class ArgumentParser {
     private $numberOfArguments;
     private $arguments;
-    private $argumentsDone = 0; //skip the firs one.
+    private $argumentsDone = 1; //skip the firs one.
 
     public function __construct($argc, $argv) {
         $this->numberOfArguments= $argc;
@@ -37,7 +28,7 @@ class ArgumentParser {
 
     /* TODO */
     public function argHelp(){
-        echo("This is help\n");
+        echo("Usage: [...] ...\n");
     }
 
     public function parseArguments(){
@@ -70,17 +61,35 @@ class ArgumentParser {
     }
 }
 
+
+class mainParser{
+    private $input;
+
+    public function __construct($stdin){
+        $input = $stdin;
+    }
+
+    private function header(){
+
+    }
+
+    private function move(){
+
+    }
+    // ...
+
+    public function parse(){
+        $line = fgets($this->input);
+
+
+    }
+
+}
+
+
 $argumentParser = new ArgumentParser($argc,$argv);
 
 $argumentParser->parseArguments();
 
+$parser = new mainParser(fopen("php://stdin","r"));
 
-// Open file
-
-
-// <!-- Run through .in file -->
-
-
-// <!-- Switch - parser  -->
-
-// <!-- Stdout generation of code -->
