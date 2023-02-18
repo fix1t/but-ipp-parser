@@ -303,6 +303,14 @@ class mainParser
                 $this->instruction($this->curLine[0]);
                 break;
 
+            case 'CALL':
+                if ($argumentCount != 2)
+                    exit(SYNTAX_ERROR);
+                $this->checkVarName($this->curLine[1]);
+                $this->instruction($this->curLine[0], $this->curLine[1], 'label');
+
+                break;
+
             default:
                 // echo DEVEL."Operation ".$this->curLine[0]." not found \n\n";
                 exit(UNEXPECTED_COMMAND);
