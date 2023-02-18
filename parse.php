@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-//error codes
 // define("DEVEL","\t[DEVEL]: ");
 define("SUCCESS", 0);
 define("PARAMETER_ERROR", 10);
@@ -142,23 +141,60 @@ class mainParser
         echo "<program language=\"IPPcode23\">\n";
     }
 
+    private function checkEscapeSequences($string)
+    {
+        $position = -1;
+        while (($position = strpos($string, '\\', $position + 1)) !== false) {
+            // \x00 - \xFF
+            if ($string[$position + 1] == 'x') {
+                $regularExpression = "/^[xX][a-fA-F][a-fA-F]*$/";
+                if (preg_match($regularExpression, substr($string, $position + 1, 3)) == 1) {
+                    continue;
+                }
+                exit(SYNTAX_ERROR);
+                // \000 - \377
+            } else {
+                $regularExpression = "/^[0-9][0-9][0-9]$/";
+                if (preg_match($regularExpression, substr($string, $position + 1, 3)) == 1) {
+                    if (substr($string, $position + 1, 3) <= 377) {
+                        //pass
+                        continue;
+                    }
+                }
+                exit(SYNTAX_ERROR);
+            }
+        }
+    }
+
+    private function isNumber($number)
+    {
+        if (is_numeric($number))
+            return;
+        if (preg_match("/^0[0-7]*$/", $number))
+            return;
+        if (preg_match("/^0[xX][0-9a-fA-F]*$/", $number))
+            return;
+        exit(SYNTAX_ERROR);
+    }
+
     private function changeXMLCharacters($string)
     {
-        $position = 0;
+        if (empty($string)) {
+            return;
+        }
+        $position = -1;
         while (($position = strpos($string, '&', $position + 1)) !== false) {
             $string = substr($string, 0, $position) . '&amp;' . substr($string, $position + 1);
         }
-        $position = 0;
+        $position = -1;
         while (($position = strpos($string, '<', $position + 1)) !== false) {
             $string = substr($string, 0, $position) . '&lt;' . substr($string, $position + 1);
         }
-        $position = 0;
+        $position = -1;
         while (($position = strpos($string, '>', $position + 1)) !== false) {
             $string = substr($string, 0, $position) . '&gt;' . substr($string, $position + 1);
         }
-        if (strpos($string, '/') !== false) {
-            exit(LEXICAL_ERROR);
-        }
+        $this->checkEscapeSequences($string);
         return $string;
     }
 
@@ -180,9 +216,6 @@ class mainParser
 
         // ...@...
         if ($valuesFound == 2) {
-            if ($argumentValue[1] == '')
-                exit(SYNTAX_ERROR);
-
             switch ($argumentValue[0]) {
                 case 'GF':
                 case 'TF':
@@ -190,10 +223,15 @@ class mainParser
                     $this->checkVarName($argumentValue[1]);
                     return array('var',  $this->changeXMLCharacters($name));
 
-                case 'int':
-                case 'bool':
                 case 'nil':
+                    if ($argumentValue[1] != 'nil')
+                        exit(LEXICAL_ERROR);
+                case 'int':
+                    $this->isNumber($argumentValue[1]);
                     return array($argumentValue[0], $argumentValue[1]);
+
+                case 'bool':
+                    return array($argumentValue[0], strtolower($argumentValue[1]));
 
                 case 'string':
                     return array($argumentValue[0], $this->changeXMLCharacters($argumentValue[1]));
@@ -219,7 +257,7 @@ class mainParser
         }
     }
 
-    private function instruction($instruction, $arg1 = false, $type1 = false, $arg2 = false, $type2 = false)
+    private function instruction($instruction, $arg1 = false, $type1 = false, $arg2 = false, $type2 = false, $arg3 = false, $type3 = false)
     {
         echo "\t<instruction order=\"" . $this->instructionOrder++ . "\" opcode=\"" . $instruction . "\">\n";
 
@@ -229,14 +267,11 @@ class mainParser
         if ($arg2 !== false) {
             echo "\t\t<arg2 type=\"" . $type2 . "\">" . $arg2 . "</arg2>\n";
         }
+        if ($arg3 !== false) {
+            echo "\t\t<arg3 type=\"" . $type3 . "\">" . $arg3 . "</arg3>\n";
+        }
 
         echo "\t</instruction>\n";
-    }
-
-    private function checkType_var_symb($var, $symbol)
-    {
-        $this->checkType_var($var);
-        $this->checkType_symb($symbol);
     }
 
     private function checkType_var($var)
@@ -248,6 +283,12 @@ class mainParser
     private function checkType_symb($symbol)
     {
         if (strpos(SYMBOL_TYPES, $symbol) === false)
+            exit(SYNTAX_ERROR);
+    }
+
+    private function checkType_type($type)
+    {
+        if ($type != 'type')
             exit(SYNTAX_ERROR);
     }
 
@@ -271,6 +312,7 @@ class mainParser
             case 'PUSHFRAME':
             case 'POPFRAME':
             case 'RETURN':
+            case 'BREAK':
                 if ($argumentCount != 1)
                     exit(SYNTAX_ERROR);
                 $this->instruction($this->curLine[0]);
@@ -290,6 +332,9 @@ class mainParser
 
                 //1 SYMB
             case 'PUSHS':
+            case 'WRITE':
+            case 'EXIT':
+            case 'DPRINT':
                 if ($argumentCount != 2)
                     exit(SYNTAX_ERROR);
 
@@ -301,37 +346,108 @@ class mainParser
 
                 //1 VAR 2 SYMB
             case 'MOVE':
+            case 'INT2CHAR':
+            case 'STRLEN':
+            case 'TYPE':
                 if ($argumentCount != 3)
                     exit(SYNTAX_ERROR);
 
                 list($argType, $argValue) = $this->parseInstructionArgument($this->curLine[1]);
                 list($argType2, $argValue2) = $this->parseInstructionArgument($this->curLine[2]);
-                $this->checkType_var_symb($argType, $argType2);
+                $this->checkType_var($argType);
+                $this->checkType_symb($argType2);
+
 
                 $this->instruction($this->curLine[0], $argValue, $argType, $argValue2, $argType2);
                 break;
 
+                //1 VAR 2 SYMB 3 SYMB
+            case 'ADD':
+            case 'SUB':
+            case 'MUL':
+            case 'IDIV':
+            case 'LT':
+            case 'EQ':
+            case 'GT':
+            case 'AND':
+            case 'OR':
+            case 'STRI2INT':
+            case 'CONCAT':
+            case 'GETCHAR':
+            case 'SETCHAR':
 
-            case 'READ':
+                if ($argumentCount != 4)
+                    exit(SYNTAX_ERROR);
+
                 list($argType, $argValue) = $this->parseInstructionArgument($this->curLine[1]);
                 list($argType2, $argValue2) = $this->parseInstructionArgument($this->curLine[2]);
+                list($argType3, $argValue3) = $this->parseInstructionArgument($this->curLine[3]);
+                $this->checkType_var($argType);
+                $this->checkType_symb($argType2);
+                $this->checkType_symb($argType3);
+                $this->instruction($this->curLine[0], $argValue, $argType, $argValue2, $argType2, $argValue3, $argType3);
+                break;
+
+
+
+                //1 VAR 2 TYPE
+            case 'READ':
+                if ($argumentCount != 3)
+                    exit(SYNTAX_ERROR);
+
+                list($argType, $argValue) = $this->parseInstructionArgument($this->curLine[1]);
+                list($argType2, $argValue2) = $this->parseInstructionArgument($this->curLine[2]);
+                $this->checkType_var($argType);
+                $this->checkType_type($argType2);
+
                 $this->instruction($this->curLine[0], $argValue, $argType, $argValue2, $argType2);
                 break;
-
-            case 'WRITE':
-                list($argType, $argValue) = $this->parseInstructionArgument($this->curLine[1]);
-                $this->instruction($this->curLine[0], $argValue, $argType);
-                break;
-
 
                 //1 LABEL
             case 'CALL':
+            case 'LABEL':
+            case 'JUMP':
                 if ($argumentCount != 2)
                     exit(SYNTAX_ERROR);
                 $this->checkVarName($this->curLine[1]);
                 $this->instruction($this->curLine[0], $this->curLine[1], 'label');
                 break;
 
+                //1 LABEL 2 SYMB 3 SYMB
+            case 'JUMPIFEQ':
+            case 'JUMPIFNEQ':
+                if ($argumentCount != 4)
+                    exit(SYNTAX_ERROR);
+
+                $this->checkVarName($this->curLine[1]);
+                list($argType2, $argValue2) = $this->parseInstructionArgument($this->curLine[2]);
+                list($argType3, $argValue3) = $this->parseInstructionArgument($this->curLine[3]);
+                $this->checkType_symb($argType2);
+                $this->checkType_symb($argType3);
+
+                $this->instruction($this->curLine[0], $this->curLine[1], 'label', $argValue2, $argType2, $argValue3, $argType3);
+                break;
+
+                //1 VAR 2SYMB (3 SYMB)
+            case 'NOT':
+
+                if ($argumentCount < 3 || $argumentCount > 4)
+                    exit(SYNTAX_ERROR);
+
+                list($argType, $argValue) = $this->parseInstructionArgument($this->curLine[1]);
+                list($argType2, $argValue2) = $this->parseInstructionArgument($this->curLine[2]);
+                $this->checkType_var($argType);
+                $this->checkType_symb($argType2);
+
+                if ($argumentCount == 4) {
+                    list($argType3, $argValue3) = $this->parseInstructionArgument($this->curLine[3]);
+                    $this->checkType_symb($argType3);
+                } else {
+                    list($argType3, $argValue3) = [false, false];
+                }
+
+                $this->instruction($this->curLine[0], $argValue, $argType, $argValue2, $argType2, $argValue3, $argType3);
+                break;
 
 
             default:
