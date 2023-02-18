@@ -132,3 +132,4 @@ class Tester {
 
 $tester = new Tester();
 $tester->runTests($argv[1] ?? "");
+// $tester->runTests("header/blankLine");
