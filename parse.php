@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-// define("DEVEL","\t[DEVEL]: ");
+define("DEVEL", "\t[DEVEL]: ");
 define("SUCCESS", 0);
 define("PARAMETER_ERROR", 10);
 define("HEADER_ERROR", 21);
@@ -177,6 +177,13 @@ class mainParser
         exit(SYNTAX_ERROR);
     }
 
+    private function isBool($bool){
+        if (strtolower($bool) == 'false' || strtolower($bool) == 'true') {
+            return;
+        }
+        exit(SYNTAX_ERROR);
+    }
+
     private function changeXMLCharacters($string)
     {
         if (empty($string)) {
@@ -194,7 +201,7 @@ class mainParser
         while (($position = strpos($string, '>', $position + 1)) !== false) {
             $string = substr($string, 0, $position) . '&gt;' . substr($string, $position + 1);
         }
-        $this->checkEscapeSequences($string);
+
         return $string;
     }
 
@@ -226,14 +233,19 @@ class mainParser
                 case 'nil':
                     if ($argumentValue[1] != 'nil')
                         exit(LEXICAL_ERROR);
+                    return array($argumentValue[0], $argumentValue[1]);
+
                 case 'int':
                     $this->isNumber($argumentValue[1]);
                     return array($argumentValue[0], $argumentValue[1]);
 
                 case 'bool':
+                    $this->isBool($argumentValue[1]);
                     return array($argumentValue[0], strtolower($argumentValue[1]));
 
                 case 'string':
+                    $this->checkEscapeSequences($argumentValue[1]);
+
                     return array($argumentValue[0], $this->changeXMLCharacters($argumentValue[1]));
 
                 default:
@@ -451,7 +463,7 @@ class mainParser
 
 
             default:
-                // echo DEVEL."Operation ".$this->curLine[0]." not found \n\n";
+                echo DEVEL . "Operation " . $this->curLine[0] . " not found \n\n";
                 exit(UNEXPECTED_COMMAND);
         }
 
