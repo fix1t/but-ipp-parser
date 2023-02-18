@@ -10,7 +10,8 @@ define("HEADER_ERROR", 21);
 define("UNEXPECTED_COMMAND", 22);
 define("LEXICAL_ERROR", 23);
 define("SYNTAX_ERROR", 23);
-
+define("SYMBOL_TYPES", "string int bool nil var");
+define("ALLOWED_SPECIAL_CHARS", "_-$&%*!?");
 
 class ArgumentParser
 {
@@ -86,17 +87,51 @@ class mainParser
     private $curLine;
     private $instructionOrder = 1;
 
+    private function prepareLine()
+    {
+        $line = fgets($this->stdin);
+        //EOF = false
+        if ($line == false) {
+            $this->curLine = false;
+            return;
+        }
+
+        //remove any comment / whitespace
+        $commentPos = strpos($line, '#');
+        if (is_numeric($commentPos)) {
+            $line = substr($line, 0, $commentPos);
+        }
+        $line = trim($line);
+
+        //EMPTY LINE / COMMENT ONLY -> get another
+        if ($line == null)
+            $this->prepareLine();
+        else {
+            $line = explode(" ", $line);
+
+            //remove empty items from array
+            foreach ($line as $key => $item) {
+                if (empty($item)) {
+                    unset($line[$key]);
+                }
+            }
+            $line = array_values($line);
+            $this->curLine = $line;
+        }
+        return;
+    }
+
     private function header()
     {
         //check if there is a prolog on the input
         $this->prepareLine();
 
         //empty input
-        if ($this->curLine === false)
+        if ($this->curLine[0] === false)
             exit(HEADER_ERROR);
 
         $prolog = ".IPPcode23";
-        if ($this->curLine != $prolog) {
+        if ($this->curLine[0] != $prolog) {
             // echo "[DEVEL]: Missling prolog.\n";
             exit(HEADER_ERROR);
         }
@@ -107,18 +142,35 @@ class mainParser
         echo "<program language=\"IPPcode23\">\n";
     }
 
-    private function parseString($string)
+    private function changeXMLCharacters($string)
     {
-        while (($position = strpos($string, '&')) !== false) {
+        $position = 0;
+        while (($position = strpos($string, '&', $position + 1)) !== false) {
             $string = substr($string, 0, $position) . '&amp;' . substr($string, $position + 1);
         }
-        while (($position = strpos($string, '<')) !== false) {
+        $position = 0;
+        while (($position = strpos($string, '<', $position + 1)) !== false) {
             $string = substr($string, 0, $position) . '&lt;' . substr($string, $position + 1);
         }
-        while (($position = strpos($string, '>')) !== false) {
+        $position = 0;
+        while (($position = strpos($string, '>', $position + 1)) !== false) {
             $string = substr($string, 0, $position) . '&gt;' . substr($string, $position + 1);
         }
+        if (strpos($string, '/') !== false) {
+            exit(LEXICAL_ERROR);
+        }
         return $string;
+    }
+
+    private function checkVarName($varName)
+    {
+        //cannot start with numbers
+        $regularExpression = "/^[" . preg_quote(ALLOWED_SPECIAL_CHARS) . "a-zA-Z][" . preg_quote(ALLOWED_SPECIAL_CHARS) . "a-zA-Z0-9]*$/";
+        if (preg_match($regularExpression, $varName)) {
+            return;
+        } else {
+            exit(SYNTAX_ERROR);
+        }
     }
 
     private function parseInstructionArgument($name)
@@ -135,7 +187,8 @@ class mainParser
                 case 'GF':
                 case 'TF':
                 case 'LF':
-                    return array('var', $name);
+                    $this->checkVarName($argumentValue[1]);
+                    return array('var',  $this->changeXMLCharacters($name));
 
                 case 'int':
                 case 'bool':
@@ -143,7 +196,7 @@ class mainParser
                     return array($argumentValue[0], $argumentValue[1]);
 
                 case 'string':
-                    return array($argumentValue[0], $this->parseString($argumentValue[1]));
+                    return array($argumentValue[0], $this->changeXMLCharacters($argumentValue[1]));
 
                 default:
                     exit(LEXICAL_ERROR);
@@ -166,48 +219,33 @@ class mainParser
         }
     }
 
-    private function instruction($instruction, $arg1 = false, $arg2 = false)
+    private function instruction($instruction, $arg1 = false, $type1 = false, $arg2 = false, $type2 = false)
     {
         echo "\t<instruction order=\"" . $this->instructionOrder++ . "\" opcode=\"" . $instruction . "\">\n";
 
-        if ($arg1) {
-            list($type, $arg1) = $this->parseInstructionArgument($arg1);
-            echo "\t\t<arg1 type=\"" . $type . "\">" . $arg1 . "</arg1>\n";
+        if ($arg1 !== false) {
+            echo "\t\t<arg1 type=\"" . $type1 . "\">" . $arg1 . "</arg1>\n";
         }
-        if ($arg2) {
-            list($type, $arg2) = $this->parseInstructionArgument($arg2);
-            echo "\t\t<arg2 type=\"" . $type . "\">" . $arg2 . "</arg2>\n";
+        if ($arg2 !== false) {
+            echo "\t\t<arg2 type=\"" . $type2 . "\">" . $arg2 . "</arg2>\n";
         }
 
         echo "\t</instruction>\n";
     }
 
-
-    private function prepareLine()
+    private function checkType_var_symb($var, $symbol)
     {
-        $line = fgets($this->stdin);
-        //EOF = false
-        if ($line == false) {
-            $this->curLine = false;
-            return;
-        }
-
-        //remove any comment / whitespace
-        $commentPos = strpos($line, '#');
-        if (is_numeric($commentPos)) {
-            $line = substr($line, 0, $commentPos);
-        }
-        $line = trim($line);
-
-
-        //EMPTY LINE / COMMENT ONLY -> get another
-        if ($line == null)
-            $this->prepareLine();
-        else
-            $this->curLine = $line;
-        return;
+        if ($var !== 'var')
+            exit(SYNTAX_ERROR);
+        if (strpos(SYMBOL_TYPES, $symbol) === false)
+            exit(SYNTAX_ERROR);
     }
 
+    private function checkType_var($var)
+    {
+        if ($var !== 'var')
+            exit(SYNTAX_ERROR);
+    }
 
     private function parseBody()
     {
@@ -218,23 +256,49 @@ class mainParser
             return;
 
         //parse input
-        $this->curLine = explode(" ", $this->curLine);
+        //expect:
+        //      [0]operationName, [1]arg1, [2]arg2 ...
         $this->curLine[0] = strtoupper($this->curLine[0]);
         $argumentCount = count($this->curLine);
+
         switch ($this->curLine[0]) {
             case 'DEFVAR':
-                $this->instruction($this->curLine[0], $this->curLine[1]);
+                if ($argumentCount != 2)
+                    exit(SYNTAX_ERROR);
+
+                list($argType, $argValue) = $this->parseInstructionArgument($this->curLine[1]);
+                $this->checkType_var($argType);
+
+                $this->instruction($this->curLine[0], $argValue, $argType);
                 break;
+            case 'MOVE':
+                if ($argumentCount != 3)
+                    exit(SYNTAX_ERROR);
+
+                list($argType, $argValue) = $this->parseInstructionArgument($this->curLine[1]);
+                list($argType2, $argValue2) = $this->parseInstructionArgument($this->curLine[2]);
+                $this->checkType_var_symb($argType, $argType2);
+
+                $this->instruction($this->curLine[0], $argValue, $argType, $argValue2, $argType2);
+                break;
+
+
             case 'READ':
-                $this->instruction($this->curLine[0], $this->curLine[1], $this->curLine[2]);
+                list($argType, $argValue) = $this->parseInstructionArgument($this->curLine[1]);
+                list($argType2, $argValue2) = $this->parseInstructionArgument($this->curLine[2]);
+                $this->instruction($this->curLine[0], $argValue, $argType, $argValue2, $argType2);
                 break;
+
             case 'WRITE':
-                $this->instruction($this->curLine[0], $this->curLine[1]);
+                list($argType, $argValue) = $this->parseInstructionArgument($this->curLine[1]);
+                $this->instruction($this->curLine[0], $argValue, $argType);
                 break;
+
             case 'CREATEFRAME':
             case 'PUSHFRAME':
             case 'POPFRAME':
-                if ($argumentCount != 1) 
+            case 'RETURN':
+                if ($argumentCount != 1)
                     exit(SYNTAX_ERROR);
                 $this->instruction($this->curLine[0]);
                 break;
@@ -270,6 +334,5 @@ $argumentParser->parseArguments();
 $parser = new mainParser();
 
 $parser->parse(fopen("php://stdin", "r"));
-// $parser->parse(fopen("tests/header/blankLine.src","r"));
 
 exit(SUCCESS);
