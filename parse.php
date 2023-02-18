@@ -235,15 +235,19 @@ class mainParser
 
     private function checkType_var_symb($var, $symbol)
     {
-        if ($var !== 'var')
-            exit(SYNTAX_ERROR);
-        if (strpos(SYMBOL_TYPES, $symbol) === false)
-            exit(SYNTAX_ERROR);
+        $this->checkType_var($var);
+        $this->checkType_symb($symbol);
     }
 
     private function checkType_var($var)
     {
         if ($var !== 'var')
+            exit(SYNTAX_ERROR);
+    }
+
+    private function checkType_symb($symbol)
+    {
+        if (strpos(SYMBOL_TYPES, $symbol) === false)
             exit(SYNTAX_ERROR);
     }
 
@@ -262,7 +266,19 @@ class mainParser
         $argumentCount = count($this->curLine);
 
         switch ($this->curLine[0]) {
+                //NO ARGUMENT
+            case 'CREATEFRAME':
+            case 'PUSHFRAME':
+            case 'POPFRAME':
+            case 'RETURN':
+                if ($argumentCount != 1)
+                    exit(SYNTAX_ERROR);
+                $this->instruction($this->curLine[0]);
+                break;
+
+                //1 VAR
             case 'DEFVAR':
+            case 'POPS':
                 if ($argumentCount != 2)
                     exit(SYNTAX_ERROR);
 
@@ -271,6 +287,19 @@ class mainParser
 
                 $this->instruction($this->curLine[0], $argValue, $argType);
                 break;
+
+                //1 SYMB
+            case 'PUSHS':
+                if ($argumentCount != 2)
+                    exit(SYNTAX_ERROR);
+
+                list($argType, $argValue) = $this->parseInstructionArgument($this->curLine[1]);
+                $this->checkType_symb($argType);
+
+                $this->instruction($this->curLine[0], $argValue, $argType);
+                break;
+
+                //1 VAR 2 SYMB
             case 'MOVE':
                 if ($argumentCount != 3)
                     exit(SYNTAX_ERROR);
@@ -294,22 +323,16 @@ class mainParser
                 $this->instruction($this->curLine[0], $argValue, $argType);
                 break;
 
-            case 'CREATEFRAME':
-            case 'PUSHFRAME':
-            case 'POPFRAME':
-            case 'RETURN':
-                if ($argumentCount != 1)
-                    exit(SYNTAX_ERROR);
-                $this->instruction($this->curLine[0]);
-                break;
 
+                //1 LABEL
             case 'CALL':
                 if ($argumentCount != 2)
                     exit(SYNTAX_ERROR);
                 $this->checkVarName($this->curLine[1]);
                 $this->instruction($this->curLine[0], $this->curLine[1], 'label');
-
                 break;
+
+
 
             default:
                 // echo DEVEL."Operation ".$this->curLine[0]." not found \n\n";
