@@ -41,10 +41,12 @@ class ArgumentParser
         }
     }
 
-    /* TODO */
     public function argHelp()
     {
-        echo ("Usage: [...] ...\n");
+        echo ("------------------------------------Usage------------------------------------ 
+1 - Filter script reads the source code in IPPcode23 from the standard input. 
+2 - Checks the lexical and syntactic correctness of the code.
+3 - Prints the XML representation to standard output.\n");
     }
 
     public function parseArguments()
